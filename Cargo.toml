@@ -1,0 +1,18 @@
+[package]
+name = "equinix-otel-tools"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.79"
+init-tracing-opentelemetry = { version = "0.16.0", features = [
+  "opentelemetry-otlp",
+  "tracing_subscriber_ext",
+] }
+opentelemetry = "0.21.0"
+tokio = { version = "1.35.1", features = ["tracing"] }
+traceparent = "0.0.3"
+tracing = "0.1.40"
+tracing-futures = { version = "0.2.5", features = ["tokio"] }

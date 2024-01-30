@@ -1,0 +1,27 @@
+{pkgs, ...}: {
+  # https://devenv.sh/languages/
+  languages.nix.enable = true;
+  languages.rust.enable = true;
+
+  # https://devenv.sh/packages/
+  packages = with pkgs; [
+    alejandra
+    otel-cli
+  ];
+
+  pre-commit = {
+    # https://devenv.sh/pre-commit-hooks/
+    hooks = {
+      alejandra.enable = true;
+      cargo-check.enable = true;
+      clippy.enable = true;
+      rustfmt.enable = true;
+      taplo.enable = true;
+    };
+    settings = {
+      clippy.denyWarnings = true;
+    };
+  };
+
+  # See full reference at https://devenv.sh/reference/options/
+}
