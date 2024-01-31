@@ -6,16 +6,15 @@ pub static TRACEPARENT: &str = "TRACEPARENT";
 
 /// Attempt to parse a valid traceparent from the [`TRACEPARENT`] environment
 /// variable
-pub fn read_traceparent() -> Result<traceparent::Traceparent, anyhow::Error> {
+pub fn read_traceparent() -> Option<traceparent::Traceparent> {
     match std::env::var(TRACEPARENT) {
         Ok(val) => {
-            let tp = traceparent::parse(&val);
-            match tp {
-                Ok(t) => Ok(t),
-                Err(e) => Err(e),
+            if let Ok(tp) = traceparent::parse(&val) {
+                return Some(tp);
             }
+            None
         }
-        Err(e) => Err(e.into()),
+        Err(_) => None,
     }
 }
 
@@ -23,8 +22,8 @@ pub fn read_traceparent() -> Result<traceparent::Traceparent, anyhow::Error> {
 /// variable, update the variable. Return whether or not we made a change.
 pub fn update_traceparent(new_traceparent: String) -> bool {
     let current = match read_traceparent() {
-        Ok(c) => c,
-        Err(_) => traceparent::make(false), // make a bogus one for comparison
+        Some(c) => c,
+        None => traceparent::make(false), // make a bogus one for comparison
     };
     if let Ok(tp) = traceparent::parse(&new_traceparent) {
         if tp == current {
@@ -43,7 +42,7 @@ pub fn update_traceparent(new_traceparent: String) -> bool {
 pub fn start_with_traceparent(name: &'static str) -> opentelemetry::ContextGuard {
     let tracer = opentelemetry::global::tracer(name);
     let span = match read_traceparent() {
-        Ok(tp) => {
+        Some(tp) => {
             let parent_spancontext = opentelemetry::trace::SpanContext::new(
                 tp.trace_id().into(),
                 tp.parent_id().into(),
@@ -58,7 +57,7 @@ pub fn start_with_traceparent(name: &'static str) -> opentelemetry::ContextGuard
             );
             tracer.start_with_context(name, &parent_context)
         }
-        Err(_) => tracer.start(name),
+        None => tracer.start(name),
     };
     opentelemetry::trace::mark_span_as_active(span)
 }
