@@ -19,6 +19,23 @@ pub fn read_traceparent() -> Result<traceparent::Traceparent, anyhow::Error> {
     }
 }
 
+/// If the provided traceparent is valid and different from our current [`TRACEPARENT`]
+/// variable, update the variable. Return whether or not we made a change.
+pub fn update_traceparent(new_traceparent: String) -> bool {
+    let current = match read_traceparent() {
+        Ok(c) => c,
+        Err(_) => traceparent::make(false), // make a bogus one for comparison
+    };
+    if let Ok(tp) = traceparent::parse(&new_traceparent) {
+        if tp == current {
+            return false;
+        }
+        std::env::set_var("TRACEPARENT", new_traceparent);
+        return true;
+    }
+    false
+}
+
 /// Start up a new otel span using name as the tracer name.
 /// If a valid [`TRACEPARENT`] environment variable is found it will be used
 /// to assemble the parent context for the span to propagate the trace
