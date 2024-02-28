@@ -6,11 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-init-tracing-opentelemetry = { version = "0.16.0", features = [
+init-tracing-opentelemetry = { version = "0.17", features = [
   "opentelemetry-otlp",
   "tracing_subscriber_ext",
 ] }
-opentelemetry = "0.21.0"
+opentelemetry = "0.22"
 tokio = { version = "1.35.1", features = ["tracing"] }
 traceparent = "0.0.3"
 tracing = "0.1.40"
