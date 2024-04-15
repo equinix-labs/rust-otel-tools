@@ -15,13 +15,15 @@
       alejandra.enable = true;
       cargo-check.enable = true;
       clippy.enable = true;
+      clippy.settings.denyWarnings = true;
       rustfmt.enable = true;
       taplo.enable = true;
     };
-    settings = {
-      clippy.denyWarnings = true;
-    };
   };
 
+  env = {
+    OTEL_EXPORTER_OTLP_ENDPOINT = "grpc://localhost:4317";
+    OTEL_EXPORTER_OTLP_INSECURE = "true";
+  };
   # See full reference at https://devenv.sh/reference/options/
 }

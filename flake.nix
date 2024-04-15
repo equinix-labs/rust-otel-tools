@@ -1,23 +1,37 @@
 {
+  nixConfig = {
+    extra-trusted-public-keys = ["devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw="];
+    extra-substituters = ["https://devenv.cachix.org"];
+  };
   inputs = {
-    # maybe update .envrc (see comment in file) when devenv is bumped
-    devenv.url = "github:cachix/devenv/v0.6.3";
-    devenv.inputs.nixpkgs.follows = "nixpkgs";
+    devenv.url = "github:cachix/devenv";
     flake-utils.url = "github:numtide/flake-utils";
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        flake-utils.follows = "flake-utils";
+      };
+    };
   };
-  outputs = {
+  outputs = inputs @ {
+    self,
     devenv,
     flake-utils,
     nixpkgs,
+    rust-overlay,
     ...
   }:
-    flake-utils.lib.eachDefaultSystem (system: {
-      devShell = nixpkgs.legacyPackages.${system}.mkShellNoCC {
-        buildInputs = [
-          nixpkgs.legacyPackages.${system}.git
-          devenv.packages.${system}.devenv
-        ];
+    flake-utils.lib.eachDefaultSystem (system: let
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [(import rust-overlay)];
+      };
+    in {
+      devShell = devenv.lib.mkShell {
+        inherit inputs pkgs;
+        modules = [./devenv.nix];
       };
     });
 }
