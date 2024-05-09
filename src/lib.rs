@@ -1,6 +1,7 @@
 use opentelemetry::trace::Tracer;
+use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 
-/// The expected environtment variable for carrying around W3C traceparents
+/// The expected environment variable for carrying around W3C traceparents
 /// among shell scripts
 pub static TRACEPARENT: &str = "TRACEPARENT";
 
@@ -85,7 +86,15 @@ pub fn generate_traceparent() -> Option<String> {
 pub fn init(name: &'static str) -> Result<(), Box<dyn std::error::Error>> {
     // XXX setting some variables manually. remove later.
     std::env::set_var("OTEL_SERVICE_NAME", name);
-    init_tracing_opentelemetry::tracing_subscriber_ext::init_subscribers()
-        .expect("init subscribers");
+    if let Ok(()) = init_tracing_opentelemetry::tracing_subscriber_ext::init_subscribers() {
+        return Ok(());
+    } else {
+        // Recreate the "temporary subscriber" setup from init-tracing-opentelemtry as a fallback
+        let subscriber = tracing_subscriber::registry()
+            .with(init_tracing_opentelemetry::tracing_subscriber_ext::build_loglevel_filter_layer())
+            .with(init_tracing_opentelemetry::tracing_subscriber_ext::build_logger_text());
+        tracing::subscriber::set_global_default(subscriber)?;
+        tracing::warn!("Tracing setup failed. Falling back to local logging.");
+    }
     Ok(())
 }
