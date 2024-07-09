@@ -1,3 +1,37 @@
+//! # rust-otel-tools
+//!
+//! Some reusable otel code for Equinix rust applications
+//!
+//! Example:
+//!
+//! ```rust
+//! use opentelemetry::trace::Tracer;
+//!
+//! #[tracing::instrument(err)]
+//! async fn something(message: String) -> Result<(), Box<dyn std::error::Error>> {
+//!     // This will mark the span as an error even though it returns Ok(())
+//!     tracing::error!("Error: {}", message);
+//!     Ok(())
+//! }
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     // Set up the otel exporter based on the the otlp exporter environment variables
+//!     // <https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/>
+//!     let _ = equinix_otel_tools::init("example-service");
+//!
+//!     // Set up a new active span, parsing the TRACEPARENT environment variable
+//!     // if it's valid
+//!     let guard = equinix_otel_tools::start_with_traceparent("example");
+//!
+//!     // call an instrumented function
+//!     something("Hello World".to_string()).await;
+//!
+//!     drop(guard);
+//!     opentelemetry::global::shutdown_tracer_provider();
+//! }
+//! ```
+
 use opentelemetry::trace::Tracer;
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 
@@ -36,19 +70,21 @@ pub fn update_traceparent(new_traceparent: String) -> bool {
     false
 }
 
-/// Start up a new otel span using name as the tracer name.
+/// Start up a new otel span using name as the span name.
 /// If a valid [`TRACEPARENT`] environment variable is found it will be used
 /// to assemble the parent context for the span to propagate the trace
 /// information.
-pub fn start_with_traceparent(name: &'static str) -> opentelemetry::ContextGuard {
-    let tracer = opentelemetry::global::tracer(name);
+pub fn start_with_traceparent(span_name: &'static str) -> opentelemetry::ContextGuard {
+    // The use of empty string here will cause you to get a tracer named the same as what you
+    // provided to our init function.
+    let tracer = opentelemetry::global::tracer("");
     let span = match read_traceparent() {
         Some(tp) => {
             let parent_spancontext = opentelemetry::trace::SpanContext::new(
                 tp.trace_id().into(),
                 tp.parent_id().into(),
                 opentelemetry::trace::TraceFlags::SAMPLED, // tp.flags().into(),
-                false,                                     // XXX????
+                false,                                     // TODO: should this be something else?
                 opentelemetry::trace::TraceState::NONE,
             );
             let trace_context = opentelemetry::Context::new();
@@ -56,9 +92,9 @@ pub fn start_with_traceparent(name: &'static str) -> opentelemetry::ContextGuard
                 &trace_context,
                 parent_spancontext,
             );
-            tracer.start_with_context(name, &parent_context)
+            tracer.start_with_context(span_name, &parent_context)
         }
-        None => tracer.start(name),
+        None => tracer.start(span_name),
     };
     opentelemetry::trace::mark_span_as_active(span)
 }
@@ -83,9 +119,14 @@ pub fn generate_traceparent() -> Option<String> {
 }
 
 /// A super-duper opinionated way to initialize otel tracing.
+/// We will respect an existing OTEL_SERVICE_NAME environment variable,
+/// but if it's absent, we set it based on what was passed in the call.
 pub fn init(name: &'static str) -> Result<(), Box<dyn std::error::Error>> {
-    // XXX setting some variables manually. remove later.
-    std::env::set_var("OTEL_SERVICE_NAME", name);
+    match std::env::var("OTEL_SERVICE_NAME") {
+        Ok(_) => (),
+        Err(_) => std::env::set_var("OTEL_SERVICE_NAME", name),
+    };
+
     if let Ok(()) = init_tracing_opentelemetry::tracing_subscriber_ext::init_subscribers() {
         return Ok(());
     } else {

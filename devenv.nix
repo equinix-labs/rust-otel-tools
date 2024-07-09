@@ -7,6 +7,7 @@
   packages = with pkgs; [
     alejandra
     otel-cli
+    cargo-rdme
   ];
 
   pre-commit = {
