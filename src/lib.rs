@@ -32,7 +32,7 @@
 //! }
 //! ```
 
-use opentelemetry::trace::Tracer;
+use opentelemetry::trace::{Span, Tracer};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 
 /// The expected environment variable for carrying around W3C traceparents
@@ -55,19 +55,35 @@ pub fn read_traceparent() -> Option<traceparent::Traceparent> {
 
 /// If the provided traceparent is valid and different from our current [`TRACEPARENT`]
 /// variable, update the variable. Return whether or not we made a change.
-pub fn update_traceparent(new_traceparent: String) -> bool {
+pub fn update_traceparent(new_traceparent: String) -> Option<opentelemetry::trace::SpanContext> {
     let current = match read_traceparent() {
         Some(c) => c,
         None => traceparent::make(false), // make a bogus one for comparison
     };
     if let Ok(tp) = traceparent::parse(&new_traceparent) {
         if tp == current {
-            return false;
+            return None;
         }
         std::env::set_var("TRACEPARENT", new_traceparent);
-        return true;
+        return Some(tp.as_spancontext());
     }
-    false
+    None
+}
+
+trait ToSpanContext {
+    fn as_spancontext(&self) -> opentelemetry::trace::SpanContext;
+}
+
+impl ToSpanContext for traceparent::Traceparent {
+    fn as_spancontext(&self) -> opentelemetry::trace::SpanContext {
+        opentelemetry::trace::SpanContext::new(
+            self.trace_id().into(),
+            self.parent_id().into(),
+            opentelemetry::trace::TraceFlags::SAMPLED, // self.flags().into(),
+            false,                                     // TODO: should this be something else?
+            opentelemetry::trace::TraceState::NONE,
+        )
+    }
 }
 
 /// Start up a new otel span using name as the span name.
@@ -80,21 +96,34 @@ pub fn start_with_traceparent(span_name: &'static str) -> opentelemetry::Context
     let tracer = opentelemetry::global::tracer("");
     let span = match read_traceparent() {
         Some(tp) => {
-            let parent_spancontext = opentelemetry::trace::SpanContext::new(
-                tp.trace_id().into(),
-                tp.parent_id().into(),
-                opentelemetry::trace::TraceFlags::SAMPLED, // tp.flags().into(),
-                false,                                     // TODO: should this be something else?
-                opentelemetry::trace::TraceState::NONE,
-            );
             let trace_context = opentelemetry::Context::new();
             let parent_context = opentelemetry::trace::TraceContextExt::with_remote_span_context(
                 &trace_context,
-                parent_spancontext,
+                tp.as_spancontext(),
             );
             tracer.start_with_context(span_name, &parent_context)
         }
         None => tracer.start(span_name),
+    };
+    opentelemetry::trace::mark_span_as_active(span)
+}
+
+/// Start up a new otel span using name as the span name.
+/// If a valid [`TRACEPARENT`] environment variable is found it will be used
+/// to assemble span link that will be added to the new span.
+pub fn start_with_spanlink(span_name: &'static str) -> opentelemetry::ContextGuard {
+    // The use of empty string here will cause you to get a tracer named the same as what you
+    // provided to our init function.
+    let tracer = opentelemetry::global::tracer("");
+    let mut span = tracer.start(span_name);
+    if let Some(tp) = read_traceparent() {
+        span.add_link(
+            tp.as_spancontext(),
+            vec![opentelemetry::KeyValue {
+                key: "key".into(), // TODO: something useful here?
+                value: "value".into(),
+            }],
+        );
     };
     opentelemetry::trace::mark_span_as_active(span)
 }
