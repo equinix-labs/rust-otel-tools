@@ -18,17 +18,16 @@
 //! async fn main() {
 //!     // Set up the otel exporter based on the the otlp exporter environment variables
 //!     // <https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/>
-//!     let _ = equinix_otel_tools::init("example-service");
+//!     let _guard = equinix_otel_tools::init("example-service");
 //!
 //!     // Set up a new active span, parsing the TRACEPARENT environment variable
 //!     // if it's valid
-//!     let guard = equinix_otel_tools::start_with_traceparent("example");
+//!     let span_guard = equinix_otel_tools::start_with_traceparent("example");
 //!
 //!     // call an instrumented function
 //!     something("Hello World".to_string()).await;
 //!
-//!     drop(guard);
-//!     opentelemetry::global::shutdown_tracer_provider();
+//!     drop(span_guard);
 //! }
 //! ```
 
@@ -150,14 +149,19 @@ pub fn generate_traceparent() -> Option<String> {
 /// A super-duper opinionated way to initialize otel tracing.
 /// We will respect an existing OTEL_SERVICE_NAME environment variable,
 /// but if it's absent, we set it based on what was passed in the call.
-pub fn init(name: &'static str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn init(
+    name: &'static str,
+) -> Result<
+    Option<init_tracing_opentelemetry::tracing_subscriber_ext::TracingGuard>,
+    Box<dyn std::error::Error>,
+> {
     match std::env::var("OTEL_SERVICE_NAME") {
         Ok(_) => (),
         Err(_) => std::env::set_var("OTEL_SERVICE_NAME", name),
     };
 
-    if let Ok(()) = init_tracing_opentelemetry::tracing_subscriber_ext::init_subscribers() {
-        return Ok(());
+    if let Ok(guard) = init_tracing_opentelemetry::tracing_subscriber_ext::init_subscribers() {
+        return Ok(Some(guard));
     } else {
         // Recreate the "temporary subscriber" setup from init-tracing-opentelemtry as a fallback
         let subscriber = tracing_subscriber::registry()
@@ -166,5 +170,5 @@ pub fn init(name: &'static str) -> Result<(), Box<dyn std::error::Error>> {
         tracing::subscriber::set_global_default(subscriber)?;
         tracing::warn!("Tracing setup failed. Falling back to local logging.");
     }
-    Ok(())
+    Ok(None)
 }
