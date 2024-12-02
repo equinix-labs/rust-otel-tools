@@ -116,13 +116,7 @@ pub fn start_with_spanlink(span_name: &'static str) -> opentelemetry::ContextGua
     let tracer = opentelemetry::global::tracer("");
     let mut span = tracer.start(span_name);
     if let Some(tp) = read_traceparent() {
-        span.add_link(
-            tp.as_spancontext(),
-            vec![opentelemetry::KeyValue {
-                key: "key".into(), // TODO: something useful here?
-                value: "value".into(),
-            }],
-        );
+        span.add_link(tp.as_spancontext(), vec![]);
     };
     opentelemetry::trace::mark_span_as_active(span)
 }
